@@ -466,6 +466,7 @@ async function loadFile(file) {
       h = video.videoHeight;
       S.duration = video.duration;
       if (window.diag) window.diag(`lu ${w}x${h} ${S.duration}s fast=${S.fast}`);
+      if (window.diag) await diagProbe();
       // L'export rapide lit le fichier lui-même : si sa fin tombe plus tard que ce qu'annonce le navigateur,
       // on analyse jusque-là. Analyser un peu trop loin ne coûte rien, pas assez laisserait des images sans masque.
       if (S.fast) {
@@ -1122,6 +1123,47 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
 });
 window.addEventListener('resize', () => { if (!$('s-review').hidden) { sizeTimeline(); renderReview(); } });
+
+// Diagnostic : plusieurs façons de recopier l'image de la vidéo, pour savoir lesquelles donnent autre chose que du gris
+// sur ce navigateur (écart de luminosité dans l'image : 0 = une seule couleur).
+async function diagProbe() {
+  const c = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  const spread = () => {
+    const d = ctx.getImageData(0, 0, 32, 32).data;
+    let lo = 255, hi = 0;
+    for (let p = 0; p < d.length; p += 4) { const l = (d[p] * 3 + d[p + 1] * 6 + d[p + 2]) / 10; if (l < lo) lo = l; if (l > hi) hi = l; }
+    return Math.round(hi - lo);
+  };
+  const probe = async (name, fn) => {
+    try { ctx.clearRect(0, 0, 32, 32); await fn(); window.diag(`essai ${name} : écart ${spread()}`); } catch (e) { window.diag(`essai ${name} : erreur ${e && e.message}`); }
+  };
+  const draw = () => ctx.drawImage(video, 0, 0, 32, 32);
+  const bitmap = async () => { const b = await createImageBitmap(video); ctx.drawImage(b, 0, 0, 32, 32); b.close(); };
+  window.diag(`api VideoDecoder=${'VideoDecoder' in window} VideoEncoder=${'VideoEncoder' in window} VideoFrame=${'VideoFrame' in window} rvfc=${hasRVFC}`);
+  for (const codec of ['avc1.42001f', 'vp8', 'vp09.00.10.08']) {
+    if ('VideoEncoder' in window) try { window.diag(`encodeur ${codec} ${(await VideoEncoder.isConfigSupported({ codec, width: 1280, height: 720, bitrate: 4e6 })).supported}`); } catch (e) { window.diag(`encodeur ${codec} erreur ${e && e.message}`); }
+  }
+  if ('VideoDecoder' in window) try { window.diag(`décodeur avc ${(await VideoDecoder.isConfigSupported({ codec: 'avc1.64002a' })).supported}`); } catch (e) { window.diag(`décodeur erreur ${e && e.message}`); }
+  const t = Math.min(0.5, S.duration / 2);
+  await seekTo(t);
+  await probe('dessin', draw);
+  await probe('bitmap', bitmap);
+  if ('VideoFrame' in window) await probe('videoframe', () => { const f = new VideoFrame(video); ctx.drawImage(f, 0, 0, 32, 32); f.close(); });
+  // Même chose avec la vidéo affichée en grand, puis en cours de lecture.
+  const old = video.style.cssText;
+  video.style.cssText = 'opacity:1;width:160px;height:160px;z-index:98';
+  await seekTo(t);
+  await sleep(500);
+  await probe('affichée dessin', draw);
+  await probe('affichée bitmap', bitmap);
+  video.muted = true;
+  try { await video.play(); await sleep(400); await probe('lecture dessin', draw); await probe('lecture bitmap', bitmap); } catch (e) { window.diag('lecture refusée ' + (e && e.message)); }
+  video.pause();
+  video.style.cssText = old;
+  await probe('cachée après lecture', draw);
+  await seekTo(0);
+}
 
 /* ---------- Création du fichier masqué ---------- */
 
