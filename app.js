@@ -541,8 +541,21 @@ async function scan() {
     for (const b of boxes.filter(isSure).map(grow)) vctx.fillRect(b.x, b.y, b.w, b.h);
     shown = null;
   };
+  // Certains navigateurs (Firefox sur des téléphones Xiaomi) lisent la vidéo mais n'en recopient que du gris :
+  // l'analyse ne verrait aucun visage. On vérifie qu'au moins une image n'est pas d'une seule couleur.
+  let sawPicture = isPhoto();
+  const tiny = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+  const tctx = tiny.getContext('2d', { willReadFrequently: true });
+  const checkPicture = (canvas) => {
+    tctx.drawImage(canvas, 0, 0, 32, 32);
+    const d = tctx.getImageData(0, 0, 32, 32).data;
+    let lo = 255, hi = 0;
+    for (let p = 0; p < d.length; p += 4) { const l = (d[p] * 3 + d[p + 1] * 6 + d[p + 2]) / 10; if (l < lo) lo = l; if (l > hi) hi = l; }
+    if (hi - lo > 24) sawPicture = true;
+  };
   // Analyse une image (déjà dessinée sur `canvas`) et range le résultat pour les images i à j.
   const submit = async (canvas, i, j) => {
+    if (!sawPicture) checkPicture(canvas);
     // Copie immédiate : en lecture continue, la toile repasse dans la réserve et peut recevoir une image plus récente
     // pendant qu'on attend un fil libre. Le résultat aurait alors été rangé à l'instant de l'ancienne image.
     const shot = createImageBitmap(canvas);
@@ -586,6 +599,13 @@ async function scan() {
     console.error(error || 'images manquantes');
     goHome();
     fail($('homeError'), "L'analyse a échoué sur ce navigateur. Essaie avec Chrome ou Safari à jour.");
+    return;
+  }
+  if (!sawPicture) {
+    // Sans image visible, aucun visage n'a pu être trouvé : continuer donnerait une vidéo sans aucun masque.
+    if (window.diag) window.diag('aucune image visible : que du gris ou une seule couleur');
+    goHome();
+    fail($('homeError'), "Ce navigateur n'arrive pas à afficher les images de cette vidéo, donc à y trouver les visages. Essaie avec Chrome ou Safari à jour.");
     return;
   }
   S.scanMs = performance.now() - started;
