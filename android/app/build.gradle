@@ -10,17 +10,15 @@ android {
         applicationId 'fr.vesky.app'
         minSdk 29
         targetSdk 36
-        versionCode 2
-        versionName '1.0.1'
+        versionCode 3
+        versionName '1.0.2'
     }
 
     // Signature des APK publiés sur GitHub. La clé et ses mots de passe restent hors du dépôt :
-    // le chemin du fichier qui les décrit est donné par VESKY_KEYSTORE (sinon ~/.vesky-signature/keystore.properties,
-    // ou l'ancien dossier ~/.skred-signature s'il n'a pas été renommé).
+    // le chemin du fichier qui les décrit est donné par VESKY_KEYSTORE (sinon ~/.vesky-signature/keystore.properties).
     // Sans ce fichier (F-Droid, IzzyOnDroid, une autre personne), l'APK de publication sort non signé.
     def home = System.getProperty('user.home')
-    def ksFile = file(System.getenv('VESKY_KEYSTORE') ?: (file("${home}/.vesky-signature/keystore.properties").exists()
-        ? "${home}/.vesky-signature/keystore.properties" : "${home}/.skred-signature/keystore.properties"))
+    def ksFile = file(System.getenv('VESKY_KEYSTORE') ?: "${home}/.vesky-signature/keystore.properties")
     if (ksFile.exists()) {
         def ks = new Properties()
         ksFile.withInputStream { ks.load(it) }

@@ -1,0 +1,1 @@
+New signing key, under the vesky name. If you have the previous version, uninstall it first: the phone refuses to update it. Same features, still no permissions.
