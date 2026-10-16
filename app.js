@@ -433,6 +433,13 @@ async function loadFile(file) {
   resetAll();
   $('homeError').hidden = true;
   S.kind = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name) ? 'photo' : 'video';
+  // Firefox sur Android lit la vidéo mais n'en donne que du gris à la page, et n'a pas WebCodecs pour la relire
+  // autrement : on le dit tout de suite plutôt qu'après une analyse qui ne verrait rien.
+  if (!isPhoto() && /Android/.test(navigator.userAgent) && /Firefox\//.test(navigator.userAgent) && !('VideoDecoder' in window)) {
+    if (window.diag) window.diag('vidéo refusée : Firefox Android sans WebCodecs');
+    fail($('homeError'), "Firefox sur Android ne sait pas traiter les vidéos. Ouvre vesky.fr avec Chrome. Les photos, elles, marchent ici.");
+    return;
+  }
   S.file = file;
   S.srcUrl = URL.createObjectURL(file);
   let w, h;
