@@ -206,13 +206,15 @@ async function keepAwake(on) {
 
 // La recherche tourne dans plusieurs fils d'exécution (un par cœur disponible, 3 au plus).
 // Si le navigateur ne le permet pas, elle tourne dans la page, plus lentement.
-function startWorker() {
+// threads : nombre de cœurs sur lesquels chaque fil répartit une détection (WebAssembly multithread, voir init).
+// wait : délai de démarrage au-delà duquel on abandonne ce fil.
+function startWorker(threads, wait) {
   return new Promise((resolve) => {
     let w;
     try { w = new Worker('detect-worker.js', { type: 'module' }); } catch { resolve(null); return; }
     const pending = new Map();
     let nextId = 1, broken = null;
-    const giveUp = setTimeout(() => { w.terminate(); resolve(null); }, 20000);
+    const giveUp = setTimeout(() => { w.terminate(); resolve(null); }, wait);
     // Fil tombé en panne une fois lancé : les analyses en attente échouent tout de suite (l'analyse s'arrête
     // avec un message) au lieu de rester suspendues, et celles qui suivent aussi.
     // Le fil est retiré de la liste ; si c'était le dernier, la recherche reprend dans la page pour le fichier suivant.
@@ -238,6 +240,7 @@ function startWorker() {
       else breakDown('fil muet');
     }, 60000);
     const runner = {
+      threads,
       stop: () => w.terminate(),
       detect: (bitmap, maxSide, always) => new Promise((ok, ko) => {
         if (broken) { bitmap.close(); ko(broken); return; }
@@ -258,7 +261,7 @@ function startWorker() {
       if (m.type === 'done') p.ok(m.boxes); else p.ko(new Error(m.message));
     };
     w.onerror = (e) => { if (window.diag) window.diag(`worker onerror : ${e.message} ${e.filename}:${e.lineno}`); clearTimeout(giveUp); resolve(null); breakDown('fil en panne'); };
-    w.postMessage({ type: 'init' });
+    w.postMessage({ type: 'init', threads });
   });
 }
 
@@ -337,10 +340,31 @@ async function init() {
     const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
     const wanted = clamp(cores - 1, 1, ios ? 2 : 3);
     const noWorkers = new URLSearchParams(location.search).has('simple');
+    // Page isolée (en-têtes COOP et COEP, voir _headers) : chaque fil répartit en plus sa détection sur plusieurs cœurs
+    // (WebAssembly multithread, qui partage la mémoire du fil : pas de moteur en plus). Les cœurs annoncés sont partagés
+    // entre les fils, sans en garder un pour la page : le décodage passe par le circuit vidéo du téléphone. Mesuré sur
+    // iPhone (Safari annonce 4 cœurs, 2 fils), vidéo 1080 x 1920 : 270 ms par image avec 1 cœur par fil, 218 avec 2,
+    // 252 avec 3.
+    // Certains navigateurs ne démarrent jamais un moteur multithread lancé depuis un fil (vu dans le Chromium d'Electron :
+    // ses propres fils ne répondent pas, sans erreur). Ailleurs, il démarre aussi vite qu'avec un seul cœur (0,1 s
+    // dans Brave et Helium). On lui laisse donc 6 s, puis on recommence avec un seul cœur par fil, comme avant.
+    // Un échec isolé peut venir d'un appareil occupé au démarrage (vu dans Helium à son lancement) : le téléphone ne
+    // s'en souvient qu'au deuxième échec d'affilée, pour ne plus attendre aux visites suivantes.
+    const SINGLE = 'vesky-un-coeur';
+    let fails = 0;
+    try { fails = Number(localStorage.getItem(SINGLE)) || 0; } catch { /* stockage refusé : on essaie à chaque fois */ }
+    const threads = self.crossOriginIsolated && fails < 2 ? Math.max(1, Math.floor(cores / wanted)) : 1;
+    const startAll = (th) => Promise.all(Array.from({ length: wanted }, () => startWorker(th, th > 1 ? 6000 : 20000))).then((w) => w.filter(Boolean));
+    const startWorkers = async () => {
+      const w = await startAll(threads);
+      if (threads === 1) return w;
+      try { if (w.length) localStorage.removeItem(SINGLE); else localStorage.setItem(SINGLE, String(fails + 1)); } catch { /* tant pis */ }
+      return w.length ? w : startAll(1);
+    };
     // Détecteur, export rapide et copie hors ligne se préparent en même temps ; le choix d'un fichier n'est permis
     // qu'une fois les trois prêts, pour qu'aucune requête ne parte ensuite.
     const [workers] = await Promise.all([
-      noWorkers ? [] : Promise.all(Array.from({ length: wanted }, startWorker)).then((w) => w.filter(Boolean)),
+      noWorkers ? [] : startWorkers(),
       loadFastExport(),
       ANDROID ? androidHello() : keepOffline(),
     ]);
@@ -350,6 +374,7 @@ async function init() {
     addEventListener('pagehide', () => { for (const r of S.runners) if (r.stop) r.stop(); });
     addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
     S.parallel = workers.length;
+    S.threads = workers.length ? workers[0].threads : 1;
     $('file').disabled = false;
     $('pickLabel').removeAttribute('aria-disabled');
     $('pickText').innerHTML = matchMedia('(pointer: fine)').matches ? 'Glisse une vidéo ou une photo,<br>ou clique pour choisir' : 'Choisir une vidéo<br>ou une photo';
@@ -508,7 +533,7 @@ async function scan() {
 
   // On regarde 30 images par seconde. Une vidéo à 60 images par seconde est regardée une image sur deux :
   // les masques couvrent quand même toutes les images, puisqu'ils débordent de plusieurs images autour de chaque visage.
-  S.srcFps = isPhoto() ? 1 : await measureFps();
+  S.srcFps = 1;
   S.fps = isPhoto() ? 1 : ANALYSIS_FPS;
   const total = isPhoto() ? 1 : Math.max(1, Math.ceil(S.duration * S.fps));
   const side = !isPhoto() && $('fast').checked ? DET_SIDE : DET_SIDE_DEEP;
@@ -518,6 +543,7 @@ async function scan() {
   S.detectMs = 0;
   S.detectCount = 0;
   S.found = [];
+  S.decoded = false;
 
   // Les images sont distribuées aux fils d'exécution libres, au fur et à mesure.
   const free = [...S.runners], waiting = [];
@@ -576,8 +602,12 @@ async function scan() {
     }, (e) => { error = e; }).finally(() => release(runner)));
   };
 
-  if (!isPhoto()) await scanByPlayback(job, total, submit, keepForPreview, () => error);
-  if (window.diag) window.diag(`lecture en continu finie : ${((performance.now() - started) / 1000).toFixed(1)} s, ${results.filter(Boolean).length + tasks.length}/${total} images envoyées`);
+  if (!isPhoto()) S.decoded = await scanByDecoding(job, total, submit, keepForPreview, () => error);
+  if (!isPhoto() && !S.decoded && !job.cancelled && !error) {
+    S.srcFps = await measureFps();
+    await scanByPlayback(job, total, submit, keepForPreview, () => error);
+  }
+  if (window.diag) window.diag(`${S.decoded ? 'décodage direct' : 'lecture en continu'} finie : ${((performance.now() - started) / 1000).toFixed(1)} s, ${results.filter(Boolean).length + tasks.length}/${total} images envoyées`);
   // Le reste (tout, si la lecture en continu n'est pas possible) : image par image, en se positionnant sur chacune.
   for (let i = 0; i < total && !job.cancelled && !error; i++) {
     if (results[i]) continue;
@@ -613,6 +643,43 @@ async function scan() {
   S.raw = results;
   buildTracks(results);
   openReview(0);
+}
+
+// Décodage direct (WebCodecs, via Mediabunny, déjà chargé pour l'export rapide) : le fichier d'origine est décodé
+// aussi vite que le téléphone le permet, au lieu de défiler au plus à vitesse normale. Chaque image est demandée
+// à son instant exact : ni image sautée, ni déplacement à reprendre. Les images sont redressées et mises à la taille
+// S.W x S.H, comme à l'export : les cadres trouvés sont donc à la même échelle qu'avec la lecture en continu.
+// Renvoie false si ce n'est pas possible ici (pas de WebCodecs, format que le téléphone ne décode pas, panne en
+// cours de route) : la lecture en continu prend alors le relais (les images déjà rangées gardent leur résultat).
+async function scanByDecoding(job, total, submit, keepForPreview, failed) {
+  if (!MB) return false;
+  let input = null;
+  try {
+    input = new MB.Input({ source: new MB.BlobSource(S.file), formats: MB.ALL_FORMATS });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track || !await track.canDecode()) return false;
+    S.srcFps = (await track.computePacketStats(60)).averagePacketRate || 30;
+    // Réserve de toiles : submit en fait une copie tout de suite, une toile peut donc resservir quelques images plus loin.
+    const sink = new MB.CanvasSink(track, { width: S.W, height: S.H, fit: 'fill', poolSize: 2 * S.runners.length + 2 });
+    // Même horloge que l'export : l'instant t de l'analyse est l'instant t + S.start du fichier.
+    const times = Array.from({ length: total }, (_, i) => frameTime(i) + S.start);
+    let i = 0;
+    for await (const wrapped of sink.canvasesAtTimestamps(times)) {
+      if (job.cancelled || failed()) break;
+      // Rien à cet instant (avant la première image du fichier) : l'image sera reprise une par une, comme avant.
+      if (wrapped) {
+        keepForPreview(wrapped.canvas);
+        await submit(wrapped.canvas, i, i);   // attend un fil libre : le décodage ne prend pas trop d'avance
+      }
+      i++;
+    }
+    return true;
+  } catch (e) {
+    if (window.diag) window.diag('décodage direct impossible : ' + (e && e.message));
+    return false;
+  } finally {
+    if (input) try { input.dispose(); } catch { /* déjà libéré */ }
+  }
 }
 
 // Lecture en continu : chaque image présentée par le navigateur est copiée au vol et envoyée à l'analyse.
@@ -902,7 +969,7 @@ function openReview(t) {
     const n = S.frames.length;
     $('stats').textContent = `${S.W}x${S.H}, ${n} images, ${Math.round(S.scanMs / 1000)} s (${Math.round(S.scanMs / n)} ms/image), `
       + `détection ${Math.round(S.detectMs / Math.max(1, S.detectCount))} ms/image sur ${S.parallel || 'page'} fils, `
-      + `${S.seekFallbacks} reprises, source ${S.srcFps.toFixed(1)} i/s, ${navigator.hardwareConcurrency || '?'} cœurs, ${navigator.deviceMemory || '?'} Go`;
+      + `${S.decoded ? 'décodage direct' : 'lecture'}, ${S.threads || 1} calcul(s) par fil, ${S.seekFallbacks} reprises, source ${S.srcFps.toFixed(1)} i/s, ${navigator.hardwareConcurrency || '?'} cœurs, ${navigator.deviceMemory || '?'} Go`;
   }
   sizeTimeline();
   refreshPanels();
