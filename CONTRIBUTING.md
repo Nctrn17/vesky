@@ -63,6 +63,15 @@ Un test existant ne se modifie pas pour le faire passer : si tu penses qu'il est
 - Ne jamais promettre plus que ce que fait l'outil. Ce qu'il ne fait pas (vêtements, tatouages, lieu, voix)
   doit rester dit clairement.
 
+## Usage des LLM
+
+Le code de vesky est écrit avec des assistants (Claude Code), et relu par moi et par Astra avant d'être publié.
+Les contributions écrites avec un LLM sont acceptées aux mêmes conditions que les autres : tu les as relues,
+tu les comprends, et les tests passent.
+
+La sécurité de l'outil ne repose pas sur la façon dont le code est écrit, mais sur ce que chacun peut vérifier :
+aucune requête réseau après le chargement, et `outils/verifier-site.sh` pour comparer le site en ligne au dépôt.
+
 ## Licence
 
 vesky est sous licence [AGPL-3.0](LICENSE). En proposant une PR, tu acceptes que ton code soit publié sous
