@@ -428,8 +428,15 @@ const drawSource = (ctx) => ctx.drawImage(isPhoto() ? S.img : video, 0, 0, S.W, 
 const frameTime = (i) => Math.min((i + 0.5) / S.fps, Math.max(0, S.duration - 0.001));
 const frameIndex = (t) => clamp(Math.floor(t * S.fps), 0, Math.max(0, S.frames.length - 1));
 
+// Numéro du dernier fichier choisi. Rien ne s'affiche pendant qu'un fichier se charge (sur iPhone, parfois plusieurs
+// secondes) : si un autre est choisi entre-temps, le premier chargement s'arrête. Sinon les deux continuaient sur la
+// même vidéo, et l'horloge du premier fichier (S.first, S.duration) pouvait rester : masques bien placés pendant la
+// vérification, mais décalés dans le fichier produit.
+let loading = 0;
+
 async function loadFile(file) {
   if (window.diag) window.diag('loadFile ' + file.type + ' ' + file.size);
+  const load = ++loading;
   resetAll();
   $('homeError').hidden = true;
   S.kind = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name) ? 'photo' : 'video';
@@ -445,14 +452,17 @@ async function loadFile(file) {
   let w, h;
   try {
     if (isPhoto()) {
-      S.img = await createImageBitmap(file);   // tient compte du sens de la photo (portrait ou paysage)
+      const img = await createImageBitmap(file);   // tient compte du sens de la photo (portrait ou paysage)
+      if (load !== loading) { img.close(); return; }
+      S.img = img;
       w = S.img.width;
       h = S.img.height;
       S.duration = 0;
     } else {
       video.src = S.srcUrl;
       await once(video, 'loadedmetadata', 'error', 20000);
-      S.start = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      if (load !== loading) return;
+      S.start =Number.isFinite(video.currentTime) ? video.currentTime : 0;
       // Sur iPhone, Safari lit l'en-tête puis s'arrête : il ne décode aucune image tant qu'on ne lui demande pas
       // un instant précis ou la lecture. On lui demande le tout début ; s'il ne répond pas, une lecture éclair.
       if (video.readyState < 2) {
@@ -462,18 +472,20 @@ async function loadFile(file) {
           if (video.readyState < 2) video.play().then(() => { video.pause(); video.currentTime = S.start; }).catch(() => {});
         }, 3000);
         await frame.finally(() => clearTimeout(late));
+        if (load !== loading) return;
       }
       if (!Number.isFinite(video.duration)) {
         // Certains fichiers n'annoncent pas leur durée : on force le navigateur à la chercher.
         video.currentTime = 1e7;
         await once(video, 'durationchange', null, 5000).catch(() => {});
+        if (load !== loading) return;
       }
       if (!Number.isFinite(video.duration) || video.duration <= 0) throw new Error('illisible');
       w = video.videoWidth;
       h = video.videoHeight;
       S.duration = video.duration;
       if (window.diag) window.diag(`lu ${w}x${h} ${S.duration}s fast=${S.fast}`);
-      if (window.diag) await diagProbe();
+      if (window.diag) { await diagProbe(); if (load !== loading) return; }
       // L'export rapide lit le fichier lui-même : si sa fin tombe plus tard que ce qu'annonce le navigateur,
       // on analyse jusque-là. Analyser un peu trop loin ne coûte rien, pas assez laisserait des images sans masque.
       if (S.fast) {
@@ -481,15 +493,20 @@ async function loadFile(file) {
           const input = new MB.Input({ source: new MB.BlobSource(file), formats: MB.ALL_FORMATS });
           const track = await input.getPrimaryVideoTrack();
           if (track) {
-            S.duration = Math.max(S.duration, (await track.computeDuration()) - S.start);
-            S.first = Math.max(0, (await track.getFirstTimestamp()) - S.start);
+            const end = await track.computeDuration(), first = await track.getFirstTimestamp();
+            if (load === loading) {
+              S.duration = Math.max(S.duration, end - S.start);
+              S.first = Math.max(0, first - S.start);
+            }
           }
           input.dispose();
         } catch { /* le navigateur seul fera foi */ }
+        if (load !== loading) return;
       }
     }
     if (!w || !h) throw new Error('illisible');
   } catch (e) {
+    if (load !== loading) return;   // un autre fichier a été choisi entre-temps : c'est lui qui compte
     if (window.diag) window.diag('échec lecture : ' + (e && e.message));
     fail($('homeError'), "Ton navigateur n'arrive pas à lire ce fichier. Essaie avec un autre, ou enregistre-le dans un autre format.");
     return;
