@@ -132,6 +132,16 @@ masks as the first, then both are exported: the output files must be byte-for-by
 The result therefore does not depend on the original face, and no watermark could be used to
 recover it. The black box is painted on the frame before it reaches the encoder, which never sees the face.
 
+### No date in the file, even a long one
+
+```bash
+node test/test-metadonnees.mjs
+```
+
+No browser needed. Writes MP4 files the way the fast export does, including a 20-minute video at 60 frames
+per second (its headers exceed 1 MB) and named tracks, then checks that after cleaning no creation date,
+track name or track language is left, and that the file reads back the same.
+
 ### Third-party files
 
 ```bash

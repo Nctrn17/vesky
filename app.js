@@ -1246,9 +1246,25 @@ async function exportPhoto() {
 }
 
 // Le navigateur écrit dans un fichier MP4 la date et l'heure de sa création. On les remet à zéro :
-// le fichier produit ne dit plus quand il a été fait. On efface aussi le nom du logiciel qui l'a écrit.
+// le fichier produit ne dit plus quand il a été fait. On efface aussi le nom du logiciel qui l'a écrit, et ce que
+// l'export rapide reprend des pistes du fichier d'origine : leur nom et leur langue.
+// La boîte moov, qui porte tout cela, est cherchée puis lue en entier. Seul le premier Mo du fichier était lu :
+// sur une longue vidéo, moov le dépasse (vers 20 min à 60 images par seconde, 32 min à 30) et rien n'était nettoyé.
 async function scrubMp4Dates(blob) {
-  const head = new Uint8Array(await blob.slice(0, 1 << 20).arrayBuffer());
+  // Boîtes du premier niveau : on ne lit que leur en-tête, jusqu'à trouver moov.
+  let at = 0, len = 0;
+  for (;;) {
+    if (at + 8 > blob.size) return blob;
+    const h = new DataView(await blob.slice(at, at + 16).arrayBuffer());
+    const t = String.fromCharCode(h.getUint8(4), h.getUint8(5), h.getUint8(6), h.getUint8(7));
+    len = h.getUint32(0);
+    if (len === 1 && h.byteLength === 16) len = Number(h.getBigUint64(8));   // taille écrite sur 64 bits (grosse boîte mdat)
+    else if (len === 0) len = blob.size - at;                                  // boîte qui va jusqu'à la fin du fichier
+    if (len < 8 || at + len > blob.size) return blob;   // boîte coupée ou de forme inattendue : on n'y touche pas
+    if (t === 'moov') break;
+    at += len;
+  }
+  const head = new Uint8Array(await blob.slice(at, at + len).arrayBuffer());
   const view = new DataView(head.buffer);
   const type = (p) => String.fromCharCode(head[p + 4], head[p + 5], head[p + 6], head[p + 7]);
   const walk = (start, end) => {
@@ -1257,14 +1273,20 @@ async function scrubMp4Dates(blob) {
       if (size < 8 || p + size > end) return;   // boîte coupée ou de forme inattendue : on n'y touche pas
       const t = type(p);
       if (t === 'moov' || t === 'trak' || t === 'mdia' || t === 'minf' || t === 'stbl') walk(p + 8, p + size);
-      else if (t === 'mvhd' || t === 'tkhd' || t === 'mdhd') head.fill(0, p + 12, p + 12 + (head[p + 8] === 1 ? 16 : 8));
+      else if (t === 'mvhd' || t === 'tkhd' || t === 'mdhd') {
+        head.fill(0, p + 12, p + 12 + (head[p + 8] === 1 ? 16 : 8));
+        const lang = head[p + 8] === 1 ? 40 : 28;
+        if (t === 'mdhd' && size >= lang + 4) head.set([0x55, 0xc4], p + lang);   // langue de la piste : « und », non précisée
+      }
       else if (t === 'hdlr') head.fill(0, p + 32, p + size);   // nom donné à la piste par le logiciel
       else if (t === 'stsd' && size >= 16 + 82 && /^(avc|hvc|hev|vp0|av0)/.test(type(p + 16))) head.fill(0, p + 16 + 50, p + 16 + 82);   // nom de l'encodeur
+      // Nom de piste, étiquettes : la boîte est vidée et devient « free », que les lecteurs ignorent.
+      else if (t === 'udta' || t === 'meta') { head.set([102, 114, 101, 101], p + 4); head.fill(0, p + 8, p + size); }
       p += size;
     }
   };
   walk(0, head.length);
-  return new Blob([head, blob.slice(head.length)], { type: blob.type });
+  return new Blob([blob.slice(0, at), head, blob.slice(at + len)], { type: blob.type });
 }
 
 function pickMime() {

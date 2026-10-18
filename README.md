@@ -133,6 +133,16 @@ masques que la première, puis les deux sont exportées : les fichiers produits 
 pour octet. Le résultat ne dépend donc pas du visage d'origine, et aucun filigrane ne peut permettre de le
 retrouver. Le carré noir est peint sur l'image avant qu'elle parte à l'encodeur, qui ne voit jamais le visage.
 
+### Aucune date dans le fichier, même long
+
+```bash
+node test/test-metadonnees.mjs
+```
+
+Sans navigateur. Écrit des MP4 comme l'export rapide, dont une vidéo de 20 minutes à 60 images par seconde
+(ses en-têtes dépassent 1 Mo) et des pistes nommées, puis vérifie qu'après nettoyage il ne reste ni date
+de création, ni nom ou langue de piste, et que le fichier se relit à l'identique.
+
 ### Fichiers tiers
 
 ```bash
