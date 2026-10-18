@@ -462,7 +462,7 @@ async function loadFile(file) {
       video.src = S.srcUrl;
       await once(video, 'loadedmetadata', 'error', 20000);
       if (load !== loading) return;
-      S.start =Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      S.start = Number.isFinite(video.currentTime) ? video.currentTime : 0;
       // Sur iPhone, Safari lit l'en-tête puis s'arrête : il ne décode aucune image tant qu'on ne lui demande pas
       // un instant précis ou la lecture. On lui demande le tout début ; s'il ne répond pas, une lecture éclair.
       if (video.readyState < 2) {
