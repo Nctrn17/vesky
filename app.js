@@ -1205,12 +1205,13 @@ function diagPreview(raw, scrubbed) {
   }
 }
 
-async function finish(blob, name, info) {
+async function finish(blob, name, info, whole = false) {
   if (S.resultUrl) URL.revokeObjectURL(S.resultUrl);
   if (S.previewUrl) URL.revokeObjectURL(S.previewUrl);
   // Fichier d'un seul tenant, et une adresse pour l'aperçu distincte de celle du téléchargement :
   // sur iPhone, Safari n'affichait pas l'aperçu une fois le téléchargement lancé.
-  blob = new Blob([await blob.arrayBuffer()], { type: blob.type });
+  // `whole` : le fichier est déjà d'un seul tenant, inutile d'en refaire une copie en mémoire.
+  if (!whole) blob = new Blob([await blob.arrayBuffer()], { type: blob.type });
   S.resultUrl = URL.createObjectURL(blob);
   S.previewUrl = URL.createObjectURL(blob);
   S.resultFile = new File([blob], name, { type: blob.type });
@@ -1242,7 +1243,24 @@ async function exportPhoto() {
   paint(vctx, 0, false);
   const blob = await new Promise((r) => view.toBlob(r, 'image/jpeg', 0.92));
   if (!blob) { fail($('fatal'), "Ce navigateur n'a pas pu créer la photo."); return; }
-  finish(blob, 'photo-masquee.jpg', 'Fichier JPEG');
+  finish(await stripJpeg(blob), 'photo-masquee.jpg', 'Fichier JPEG');
+}
+
+// Certains navigateurs (Safari) glissent leurs propres métadonnées dans le JPEG qu'ils produisent. On ne garde que ce
+// qu'il faut pour afficher l'image : APP0 (JFIF), APP14 (couleurs Adobe) et les données. Repris de Masque (onestlatech/masque, AGPL-3.0).
+async function stripJpeg(blob) {
+  const b = new Uint8Array(await blob.arrayBuffer());
+  if (b[0] !== 0xff || b[1] !== 0xd8) return blob;
+  const parts = [b.subarray(0, 2)];
+  for (let i = 2; i + 4 <= b.length;) {
+    if (b[i] !== 0xff) return blob;   // forme inattendue : on rend la photo telle quelle plutôt qu'un fichier cassé
+    const m = b[i + 1];
+    if (m === 0xda) { parts.push(b.subarray(i)); break; }   // après SOS, ce ne sont plus que les données de l'image
+    const end = i + 2 + ((b[i + 2] << 8) | b[i + 3]);
+    if (!((m >= 0xe0 && m <= 0xef && m !== 0xe0 && m !== 0xee) || m === 0xfe)) parts.push(b.subarray(i, end));
+    i = end;
+  }
+  return new Blob(parts, { type: 'image/jpeg' });
 }
 
 // Le navigateur écrit dans un fichier MP4 la date et l'heure de sa création. On les remet à zéro :
@@ -1265,7 +1283,13 @@ async function scrubMp4Dates(blob) {
     at += len;
   }
   const head = new Uint8Array(await blob.slice(at, at + len).arrayBuffer());
-  const view = new DataView(head.buffer);
+  scrubMp4Bytes(head);
+  return new Blob([blob.slice(0, at), head, blob.slice(at + len)], { type: blob.type });
+}
+
+// Même nettoyage, fait sur place dans les octets : la boîte moov seule, ou le fichier entier quand il est déjà en mémoire.
+function scrubMp4Bytes(head) {
+  const view = new DataView(head.buffer, head.byteOffset, head.byteLength);
   const type = (p) => String.fromCharCode(head[p + 4], head[p + 5], head[p + 6], head[p + 7]);
   const walk = (start, end) => {
     for (let p = start; p + 8 <= end;) {
@@ -1286,7 +1310,6 @@ async function scrubMp4Dates(blob) {
     }
   };
   walk(0, head.length);
-  return new Blob([blob.slice(0, at), head, blob.slice(at + len)], { type: blob.type });
 }
 
 function pickMime() {
@@ -1356,7 +1379,13 @@ async function exportFast() {
     };
     job.cancel = () => conversion.cancel();
     await conversion.execute();
-    made = new Blob([output.target.buffer], { type: 'video/mp4' });
+    // Nettoyé sur place puis copié une seule fois : une longue vidéo ne tient en mémoire qu'en deux exemplaires
+    // au plus, au lieu de quatre, ce qui évite que la page plante sur un téléphone.
+    const bytes = new Uint8Array(output.target.buffer);
+    const raw = window.diag ? new Blob([bytes], { type: 'video/mp4' }) : null;
+    scrubMp4Bytes(bytes);
+    made = new Blob([bytes], { type: 'video/mp4' });
+    if (raw) diagPreview(raw, made);
   } catch (e) {
     if (!job.cancelled) console.error(e);
   }
@@ -1367,8 +1396,7 @@ async function exportFast() {
   if (job.cancelled) { openReview(0); return true; }
   if (!made || !made.size) return false;
   const sound = audioKept ? 'avec le son' : S.keepAudio ? "sans le son (il n'a pas pu être repris)" : 'sans le son';
-  if (window.diag) diagPreview(made, await scrubMp4Dates(made));
-  finish(await scrubMp4Dates(made), 'video-masquee.mp4', `Fichier MP4, ${sound}, export rapide`);
+  finish(made, 'video-masquee.mp4', `Fichier MP4, ${sound}, export rapide`, true);
   return true;
 }
 

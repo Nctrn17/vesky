@@ -7,9 +7,11 @@
 import { readFileSync } from 'node:fs';
 import * as MB from '../vendor/mediabunny/mediabunny.min.mjs';
 
-// La fonction est reprise telle quelle d'app.js, qui ne se charge pas hors d'une page.
-const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8').match(/async function scrubMp4Dates\(blob\) \{[\s\S]*?\n\}\n/)[0];
-const scrubMp4Dates = new Function('return ' + src)();
+// Les deux fonctions sont reprises telles quelles d'app.js, qui ne se charge pas hors d'une page.
+const app = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+const fn = (re) => app.match(re)[0];
+const src = fn(/async function scrubMp4Dates\(blob\) \{[\s\S]*?\n\}\n/) + fn(/function scrubMp4Bytes\(head\) \{[\s\S]*?\n\}\n/);
+const scrubMp4Dates = new Function(src + '\nreturn scrubMp4Dates;')();
 
 // Paquets factices (Mediabunny ne les décode pas pour écrire) : une image tous les 1/fps à ±2 ms près, comme
 // l'horloge irrégulière d'un téléphone, et le son AAC à 48 kHz.
