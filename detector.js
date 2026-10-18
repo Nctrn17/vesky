@@ -35,9 +35,11 @@ export async function detectBoth(detect, source, sw, sh, maxSide, minScore, alwa
   return boxes.concat(low.map((b) => ({ ...b, lo: true })));
 }
 
-export async function createDetector(base) {
+// threads : cœurs utilisés pour une détection. Plus d'un seulement si la page est isolée (crossOriginIsolated),
+// sinon ONNX Runtime n'a pas de mémoire partagée et revient de lui-même à un seul.
+export async function createDetector(base, threads = 1) {
   ort.env.wasm.wasmPaths = base + 'vendor/ort/';
-  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.numThreads = threads;
   const session = await ort.InferenceSession.create(base + 'models/yunet.onnx', { executionProviders: ['wasm'] });
 
   // Une toile et un tampon par taille d'image : les deux passes alternent deux tailles, et tout recréer à chaque image
