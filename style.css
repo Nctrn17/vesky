@@ -141,6 +141,21 @@ button { font: inherit; color: inherit; }
   font: 500 13px/1.45 var(--mono);
 }
 
+/* Navigateur intégré de TikTok, Instagram… : la flèche montre leur menu ⋯, en haut à droite. */
+.inApp {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: -18px -24px 14px;
+  padding: 12px 14px 12px 24px;
+  background: var(--ink);
+  color: var(--yellow);
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.35;
+}
+.inApp svg { flex: none; width: 34px; height: 34px; margin-top: -4px; }
+
 /* ---------- Vérification ---------- */
 
 .stage {

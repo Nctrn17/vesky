@@ -508,7 +508,9 @@ async function loadFile(file) {
   } catch (e) {
     if (load !== loading) return;   // un autre fichier a été choisi entre-temps : c'est lui qui compte
     if (window.diag) window.diag('échec lecture : ' + (e && e.message));
-    fail($('homeError'), "Ton navigateur n'arrive pas à lire ce fichier. Essaie avec un autre, ou enregistre-le dans un autre format.");
+    fail($('homeError'), IN_APP
+      ? `Le navigateur de ${IN_APP} n'arrive pas à lire ce fichier. Touche ⋯ en haut à droite, puis « Ouvrir dans le navigateur » ou « dans Safari », et réessaie.`
+      : "Ton navigateur n'arrive pas à lire ce fichier. Essaie avec un autre, ou enregistre-le dans un autre format.");
     return;
   }
 
@@ -1646,6 +1648,16 @@ if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.
   $('file').addEventListener('cancel', nothingCame);
   $('file').addEventListener('click', () => addEventListener('focus', nothingCame, { once: true }));
   $('file').addEventListener('change', () => { clearTimeout(waiting); waiting = null; });
+}
+
+/* ---------- Navigateur intégré d'une app ---------- */
+
+// Ouvert depuis un lien TikTok, Instagram ou Facebook, vesky tourne dans le navigateur de l'app, qui lit mal
+// les vidéos. On invite à rouvrir la page dans le vrai navigateur, par le menu ⋯ qu'elles mettent en haut à droite.
+const IN_APP = ((ua) => /musical_ly|BytedanceWebview|TikTok/.test(ua) ? 'TikTok' : /Instagram/.test(ua) ? 'Instagram' : /FBAN|FBAV|FB_IAB/.test(ua) ? 'Facebook' : null)(navigator.userAgent);
+if (IN_APP) {
+  $('inAppText').textContent = `Tu es dans le navigateur de ${IN_APP}, qui lit mal les vidéos. Touche ⋯ en haut à droite, puis « Ouvrir dans le navigateur » ou « dans Safari ».`;
+  $('inApp').hidden = false;
 }
 
 /* ---------- Installer l'app ---------- */
