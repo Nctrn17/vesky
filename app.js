@@ -1276,6 +1276,7 @@ async function finish(blob, name, info, whole = false) {
   // sur iPhone, Safari n'affichait pas l'aperçu une fois le téléchargement lancé.
   // `whole` : le fichier est déjà d'un seul tenant, inutile d'en refaire une copie en mémoire.
   if (!whole) blob = new Blob([await blob.arrayBuffer()], { type: blob.type });
+  if (window.diag && S.exportT0) window.diag(`export fini : ${((performance.now() - S.exportT0) / 1000).toFixed(1)} s`);
   S.resultUrl = URL.createObjectURL(blob);
   S.previewUrl = URL.createObjectURL(blob);
   S.resultFile = new File([blob], name, { type: blob.type });
@@ -1303,6 +1304,7 @@ async function finish(blob, name, info, whole = false) {
 async function exportPhoto() {
   S.sel = null;
   decorLevel = new WeakMap();
+  S.exportT0 = performance.now();
   $('fatal').hidden = true;
   drawSource(vctx);
   paint(vctx, 0, false);
@@ -1469,6 +1471,8 @@ async function exportVideo() {
   stopPlay();
   S.sel = null;
   decorLevel = new WeakMap();   // le fichier produit ne dépend pas des images regardées avant
+  S.exportT0 = performance.now();
+  if (window.diag) window.diag(`export ${S.style}, ${S.fast ? 'rapide' : 'de secours'}`);
   if (S.fast) {
     if (await exportFast()) return;
     // L'enregistrement doit démarrer juste après un appui sur le bouton (pour le son sur iPhone) : on redemande.
