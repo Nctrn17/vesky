@@ -263,6 +263,7 @@ button { font: inherit; color: inherit; }
 .ctl.on { background: var(--paper); color: var(--ink); border-color: var(--paper); }
 .ctl .sq { width: 18px; height: 18px; background: var(--paper); }
 .ctl.on .sq { background: var(--ink); }
+.ctl .sq.decor { background: linear-gradient(135deg, #8a8a8a 50%, #3c3c3c 50%); }
 .go {
   all: unset;
   cursor: pointer;

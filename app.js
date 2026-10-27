@@ -852,14 +852,66 @@ function toggleTrack(tr, j) {
 const manualAt = (t) => S.manual.filter((m) => t >= m.t0 - 1e-3 && t <= m.t1 + 1e-3);
 const inside = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
+// Style « décor » : chaque case prend un gris proche de ce qui l'entoure, pour se fondre dans l'image.
+// La lumière est mesurée sur une bande autour de la case, sur une copie réduite de l'image, en sautant tout ce qui
+// touche une case (la sienne comme celles des voisins) : rien ne vient d'un visage. Seuls 6 gris sont possibles,
+// pour ne rien dire de précis sur le décor (ni teinte, ni couleur de peau d'un cou ou d'une main).
+const GREYS = [24, 60, 98, 138, 180, 222];
+const DECOR_W = 192;   // largeur de la copie réduite : une seule lecture de pixels par image, même avec 500 cases
+let decorCanvas = null, decorLevel = new WeakMap();
+function decorGreys(ctx, rects, keys) {
+  const k = Math.min(1, DECOR_W / S.W);
+  const w = Math.max(1, Math.round(S.W * k)), h = Math.max(1, Math.round(S.H * k));
+  if (!decorCanvas || decorCanvas.width !== w || decorCanvas.height !== h) {
+    decorCanvas = document.createElement('canvas');
+    decorCanvas.width = w;
+    decorCanvas.height = h;
+  }
+  const small = decorCanvas.getContext('2d', { willReadFrequently: true });
+  small.drawImage(ctx.canvas, 0, 0, w, h);
+  const px = small.getImageData(0, 0, w, h).data;
+  // Cases en pixels de la copie, élargies de 2 pixels : la réduction mélange un pixel avec ses voisins.
+  const boxes = rects.map((r) => ({ x0: r.x * k - 2, y0: r.y * k - 2, x1: (r.x + r.w) * k + 2, y1: (r.y + r.h) * k + 2 }));
+  const hidden = (x, y, near) => near.some((b) => x + 1 > b.x0 && x < b.x1 && y + 1 > b.y0 && y < b.y1);
+  const light = (i) => 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+  return boxes.map((b, n) => {
+    const m = Math.max(3, (b.x1 - b.x0) * 0.3);
+    const X0 = Math.max(0, Math.floor(b.x0 - m)), Y0 = Math.max(0, Math.floor(b.y0 - m));
+    const X1 = Math.min(w, Math.ceil(b.x1 + m)), Y1 = Math.min(h, Math.ceil(b.y1 + m));
+    const near = boxes.filter((o) => o.x0 < X1 && o.x1 > X0 && o.y0 < Y1 && o.y1 > Y0);
+    let sum = 0, count = 0;
+    for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) {
+      if (hidden(x, y, near)) continue;
+      sum += light((y * w + x) * 4);
+      count++;
+    }
+    // On garde le gris d'avant tant que la lumière ne s'en éloigne pas nettement : sinon la case clignote entre deux gris.
+    const key = keys[n];
+    let level = decorLevel.get(key);
+    if (count) {
+      const L = sum / count;
+      if (level == null || Math.abs(L - GREYS[level]) > 30) level = GREYS.reduce((best, g, i) => (Math.abs(L - g) < Math.abs(L - GREYS[best]) ? i : best), 0);
+    }
+    if (level == null) level = 0;   // case entourée d'autres visages : rien à mesurer, on reste sur le plus sombre
+    decorLevel.set(key, level);
+    const g = GREYS[level];
+    return `rgb(${g},${g},${g})`;
+  });
+}
+
 function paint(ctx, t, edit) {
   const j = frameIndex(t);
   const auto = S.frames[j] || [];
   const rects = [...auto.filter((b) => !isOff(b.track, j)), ...manualAt(t).map(manualRect)];
 
   // D'abord les cases pleines : c'est elles qui protègent.
+  const keys = [...auto.filter((b) => !isOff(b.track, j)).map((b) => b.track), ...manualAt(t)];
+  const greys = S.style === 'decor' && rects.length ? decorGreys(ctx, rects, keys) : null;
   ctx.fillStyle = '#000';
-  for (const r of rects) ctx.fillRect(Math.floor(r.x), Math.floor(r.y), Math.ceil(r.w) + 1, Math.ceil(r.h) + 1);
+  rects.forEach((r, k) => {
+    if (greys) ctx.fillStyle = greys[k];
+    ctx.fillRect(Math.floor(r.x), Math.floor(r.y), Math.ceil(r.w) + 1, Math.ceil(r.h) + 1);
+  });
 
   // L'émoji est seulement posé par-dessus la case, il ne la remplace jamais.
   if (S.style === 'emoji') {
@@ -1128,13 +1180,13 @@ $('next').onclick = () => { stopPlay(); goTo(S.t + 1 / S.fps); };
 $('play').onclick = togglePlay;
 
 // Le bouton carré fait défiler les styles de masque.
-const STYLES = [['noir', ''], ['emoji', '😶'], ['emoji', '💀'], ['emoji', '🐸']];
+const STYLES = [['noir', ''], ['decor', ''], ['emoji', '😶'], ['emoji', '💀'], ['emoji', '🐸']];
 $('styleBtn').onclick = () => {
-  const i = STYLES.findIndex(([st, em]) => st === S.style && (st === 'noir' || em === S.emoji));
+  const i = STYLES.findIndex(([st, em]) => st === S.style && (st !== 'emoji' || em === S.emoji));
   const [st, em] = STYLES[(i + 1) % STYLES.length];
   S.style = st;
   if (em) S.emoji = em;
-  $('styleBtn').innerHTML = st === 'noir' ? '<span class="sq"></span>' : em;
+  $('styleBtn').innerHTML = st === 'emoji' ? em : `<span class="sq${st === 'decor' ? ' decor' : ''}"></span>`;
   renderReview();
 };
 $('audioBtn').onclick = () => {
@@ -1240,6 +1292,7 @@ async function finish(blob, name, info, whole = false) {
 
 async function exportPhoto() {
   S.sel = null;
+  decorLevel = new WeakMap();
   $('fatal').hidden = true;
   drawSource(vctx);
   paint(vctx, 0, false);
@@ -1405,6 +1458,7 @@ async function exportFast() {
 async function exportVideo() {
   stopPlay();
   S.sel = null;
+  decorLevel = new WeakMap();   // le fichier produit ne dépend pas des images regardées avant
   if (S.fast) {
     if (await exportFast()) return;
     // L'enregistrement doit démarrer juste après un appui sur le bouton (pour le son sur iPhone) : on redemande.
