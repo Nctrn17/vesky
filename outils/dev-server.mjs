@@ -6,7 +6,11 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const port = Number(process.env.PORT) || 5173;
-const csp = (await readFile(new URL('../_headers', import.meta.url), 'utf8')).match(/Content-Security-Policy: (.+)/)[1].trim();
+const headers = await readFile(new URL('../_headers', import.meta.url), 'utf8');
+const header = (name) => headers.match(new RegExp(name + ': (.+)'))[1].trim();
+// Comme en ligne : politique de sécurité, et page isolée pour la détection sur plusieurs cœurs.
+const csp = header('Content-Security-Policy');
+const isolation = { 'Cross-Origin-Opener-Policy': header('Cross-Origin-Opener-Policy'), 'Cross-Origin-Embedder-Policy': header('Cross-Origin-Embedder-Policy') };
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -28,7 +32,7 @@ createServer(async (req, res) => {
   if (!file.startsWith(root)) { res.writeHead(403).end(); return; }
   try {
     const body = await readFile(file);
-    res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store', 'Content-Security-Policy': csp });
+    res.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store', 'Content-Security-Policy': csp, ...isolation });
     res.end(body);
     console.log(200, path);
   } catch {
