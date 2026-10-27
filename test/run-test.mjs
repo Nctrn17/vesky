@@ -74,6 +74,8 @@ out.reglages = await run(`${TRUTH} ${STATS} const res = {};
   window.vesky.retrack({ match: 1.6, lowMatch: 0.6 }); return res;`);
 const save = process.argv.includes('save');   // enregistre la vidéo masquée dans test/out/
 if ((!known && !save) || process.argv.includes('noexport')) { console.log(JSON.stringify(out, null, 2)); ws.close(); chrome.kill(); process.exit(0); }
+// Le contrôle des masques cherche des carrés noirs : le gris du style décor, par défaut, passerait pour un visage visible.
+await run(`window.vesky.S.style = 'noir';`);
 await run(`document.getElementById('export').click(); while (document.getElementById('s-done').hidden && document.getElementById('fatal').hidden) await new Promise(r => setTimeout(r, 200));`);
 
 out.export = await run(`${TRUTH} const S = window.vesky.S; const v = document.getElementById('result');

@@ -88,7 +88,7 @@ const S = {
   sel: null,        // masque sélectionné : { manual } ou { track }
   nextId: 1,
   t: 0,
-  style: 'noir',
+  style: 'decor',
   emoji: '😶',
   keepAudio: true,
   job: null,        // tâche en cours (analyse ou création), annulable
@@ -564,8 +564,13 @@ async function scan() {
   const showPreview = (canvas, boxes) => {
     if (canvas !== shown) return;
     vctx.drawImage(preview, 0, 0);
+    const rects = boxes.filter(isSure).map(grow);
+    const greys = S.style === 'decor' && rects.length ? decorGreys(vctx, rects, rects) : null;
     vctx.fillStyle = '#000';
-    for (const b of boxes.filter(isSure).map(grow)) vctx.fillRect(b.x, b.y, b.w, b.h);
+    rects.forEach((b, k) => {
+      if (greys) vctx.fillStyle = greys[k];
+      vctx.fillRect(b.x, b.y, b.w, b.h);
+    });
     shown = null;
   };
   // Certains navigateurs (Firefox sur des téléphones Xiaomi) lisent la vidéo mais n'en recopient que du gris :
@@ -937,6 +942,11 @@ function paint(ctx, t, edit) {
     const selected = S.sel && S.sel.track === b.track;
     if (isOff(b.track, j)) frame(b, '#ff6b5e', selected);
     else if (selected) frame(b, '#e9ff45', true);
+    else if (S.style === 'decor') {   // une case grise se fond dans l'image : un fin contour montre qu'elle est là
+      ctx.lineWidth = lw * 0.6;
+      frame(b, 'rgba(233, 255, 69, 0.8)', true);
+      ctx.lineWidth = lw;
+    }
   }
   for (const m of manualAt(t)) frame(manualRect(m), '#e9ff45', S.sel && S.sel.manual === m);
   ctx.setLineDash([]);
@@ -1180,7 +1190,7 @@ $('next').onclick = () => { stopPlay(); goTo(S.t + 1 / S.fps); };
 $('play').onclick = togglePlay;
 
 // Le bouton carré fait défiler les styles de masque.
-const STYLES = [['noir', ''], ['decor', ''], ['emoji', '😶'], ['emoji', '💀'], ['emoji', '🐸']];
+const STYLES = [['decor', ''], ['noir', ''], ['emoji', '😶'], ['emoji', '💀'], ['emoji', '🐸']];
 $('styleBtn').onclick = () => {
   const i = STYLES.findIndex(([st, em]) => st === S.style && (st !== 'emoji' || em === S.emoji));
   const [st, em] = STYLES[(i + 1) % STYLES.length];
