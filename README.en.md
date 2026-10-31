@@ -15,7 +15,7 @@ can be undone by AI. A solid box cannot: there is no image left underneath.
 ## What it does
 
 1. You pick a video or a photo.
-2. The video is analysed 30 times per second, and a solid box is placed on every face: black, grey matched to the background, or an emoji on a black box. It stays on every frame.
+2. The video is analysed 30 times per second, and a solid box is placed on every face: black, grey matched to the background (photos only), or an emoji on a black box. It stays on every frame.
 3. You check: add a mask where a face was missed, remove one placed by mistake.
 4. The file is fully re-encoded: the location, date and phone model stored in the original file are gone.
 

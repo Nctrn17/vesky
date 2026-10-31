@@ -88,7 +88,7 @@ const S = {
   sel: null,        // masque sélectionné : { manual } ou { track }
   nextId: 1,
   t: 0,
-  style: 'decor',
+  style: 'noir',     // 'decor' seulement pour une photo (styleDefaults)
   emoji: '😶',
   keepAudio: true,
   job: null,        // tâche en cours (analyse ou création), annulable
@@ -440,6 +440,7 @@ async function loadFile(file) {
   resetAll();
   $('homeError').hidden = true;
   S.kind = file.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name) ? 'photo' : 'video';
+  styleDefaults();
   // Firefox sur Android lit la vidéo mais n'en donne que du gris à la page, et n'a pas WebCodecs pour la relire
   // autrement : on le dit tout de suite plutôt qu'après une analyse qui ne verrait rien.
   if (!isPhoto() && /Android/.test(navigator.userAgent) && /Firefox\//.test(navigator.userAgent) && !('VideoDecoder' in window)) {
@@ -1190,13 +1191,24 @@ $('next').onclick = () => { stopPlay(); goTo(S.t + 1 / S.fps); };
 $('play').onclick = togglePlay;
 
 // Le bouton carré fait défiler les styles de masque.
+// Le style décor est réservé aux photos : sur une vidéo, les cases changent de gris d'une image à l'autre et attirent l'œil.
 const STYLES = [['decor', ''], ['noir', ''], ['emoji', '😶'], ['emoji', '💀'], ['emoji', '🐸']];
+const stylesHere = () => (isPhoto() ? STYLES : STYLES.filter(([st]) => st !== 'decor'));
+const showStyle = () => {
+  $('styleBtn').innerHTML = S.style === 'emoji' ? S.emoji : `<span class="sq${S.style === 'decor' ? ' decor' : ''}"></span>`;
+};
+// À chaque fichier : décor pour une photo, noir pour une vidéo. Un émoji choisi avant est gardé.
+function styleDefaults() {
+  if (S.style !== 'emoji') S.style = isPhoto() ? 'decor' : 'noir';
+  showStyle();
+}
 $('styleBtn').onclick = () => {
-  const i = STYLES.findIndex(([st, em]) => st === S.style && (st !== 'emoji' || em === S.emoji));
-  const [st, em] = STYLES[(i + 1) % STYLES.length];
+  const list = stylesHere();
+  const i = list.findIndex(([st, em]) => st === S.style && (st !== 'emoji' || em === S.emoji));
+  const [st, em] = list[(i + 1) % list.length];
   S.style = st;
   if (em) S.emoji = em;
-  $('styleBtn').innerHTML = st === 'emoji' ? em : `<span class="sq${st === 'decor' ? ' decor' : ''}"></span>`;
+  showStyle();
   renderReview();
 };
 $('audioBtn').onclick = () => {
