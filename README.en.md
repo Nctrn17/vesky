@@ -56,7 +56,8 @@ You don't have to take our word for it. Each point below can be checked without 
   (canvas + MediaRecorder). Add `?lent` to the URL to force this mode.
 - Photos: JPEG.
 - Installable on the home screen (`manifest.webmanifest`) and usable offline: `sw.js` keeps a copy
-  of the site's files on the phone. With a connection, the online version is always served.
+  of the site's files on the phone. With a connection, the online version is served;
+  if the site does not answer within 3 seconds (congested network), the copy is used.
 - Everything is served by the site itself, and a security policy (`_headers`) forbids the browser
   from connecting to any other site.
 

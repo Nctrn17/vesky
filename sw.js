@@ -1,7 +1,15 @@
 // Service worker : garde une copie des fichiers du site sur le téléphone, pour que vesky marche sans réseau.
-// Avec du réseau, c'est toujours la version en ligne qui est servie (et la copie est mise à jour).
-// Sans réseau, c'est la copie. Aucune requête ne part vers un autre site.
+// Avec du réseau, c'est la version en ligne qui est servie (et la copie est mise à jour).
+// Sans réseau, ou si le site ne répond pas en 3 secondes (réseau saturé), c'est la copie.
+// Aucune requête ne part vers un autre site.
 const CACHE = 'vesky';
+// Réseau saturé : sans ce délai, chaque fichier attendait le site pendant de longues secondes alors que tout est déjà
+// sur le téléphone. La demande est abandonnée, pas laissée en route. Seule peut rester en route la vérification de
+// sw.js que le navigateur fait de lui-même. Un chargement servi par la copie ne la met pas à jour : ce sera au suivant.
+// Après un premier délai dépassé, la copie sert d'office pendant une minute : les fichiers se chargent en chaîne,
+// on n'attend donc qu'une fois.
+const WAIT = 3000, SLOW_FOR = 60000;
+let slowUntil = 0;
 const FILES = [
   './',
   'style.css',
@@ -64,14 +72,21 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || !KNOWN.has(url.href)) return;
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
+    const kept = await cache.match(url.href);
+    if (kept && Date.now() < slowUntil) return kept;
+    // Sans copie, on attend le site aussi longtemps qu'il faut. Le délai ne court que jusqu'au début de la réponse.
+    const stop = new AbortController();
+    const timer = kept ? setTimeout(() => stop.abort(), WAIT) : 0;
     try {
-      const fresh = await fetch(e.request);
+      const fresh = await fetch(e.request, { signal: stop.signal });
       if (fresh.ok) cache.put(url.href, fresh.clone());
       return fresh;
     } catch (err) {
-      const kept = await cache.match(url.href);
+      if (stop.signal.aborted) slowUntil = Date.now() + SLOW_FOR;
       if (kept) return kept;
       throw err;
+    } finally {
+      clearTimeout(timer);
     }
   })());
 });

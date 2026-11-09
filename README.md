@@ -55,7 +55,8 @@ Pas besoin de nous croire sur parole : chacun de ces points se vérifie sans rie
   pendant qu'elle défile (canvas + MediaRecorder). `?lent` dans l'adresse force ce mode.
 - Photo : JPEG.
 - Installable sur l'écran d'accueil (`manifest.webmanifest`) et utilisable sans réseau : `sw.js` garde une copie
-  des fichiers du site sur le téléphone. Avec du réseau, c'est toujours la version en ligne qui est servie.
+  des fichiers du site sur le téléphone. Avec du réseau, c'est la version en ligne qui est servie ;
+  si le site ne répond pas en 3 secondes (réseau saturé), c'est la copie.
 - Tout est servi par le site lui-même, et une politique de sécurité (`_headers`) interdit au navigateur
   toute connexion vers un autre site.
 

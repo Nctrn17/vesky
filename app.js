@@ -292,11 +292,15 @@ async function loadFastExport() {
 
 // Copie du site sur le téléphone (sw.js), pour marcher sans réseau. On attend qu'elle soit finie avant
 // d'autoriser le choix d'un fichier : ainsi, plus aucune requête ne part une fois le fichier choisi.
+// Exception, sur un réseau saturé : la vérification de sw.js par le navigateur peut être encore en route (voir plus bas).
 async function keepOffline() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    await navigator.serviceWorker.register('sw.js');
-    await Promise.race([navigator.serviceWorker.ready, sleep(15000)]);
+    // L'enregistrement fait vérifier sw.js en ligne par le navigateur. Si la copie est déjà là (elle sert cette page),
+    // on n'attend cette vérification que 3 secondes : sur un réseau saturé, elle bloquait le choix du fichier.
+    const ready = navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready);
+    ready.catch(() => {});
+    await Promise.race([ready, sleep(navigator.serviceWorker.controller ? 3000 : 15000)]);
   } catch (e) {
     console.error(e);
   }
