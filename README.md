@@ -14,7 +14,7 @@ peuvent être défaits par une IA. Un carré plein, non : il n'y a plus d'image 
 
 1. Tu choisis une vidéo ou une photo.
 2. La vidéo est analysée 30 fois par seconde, et un carré plein est placé sur chaque visage : noir, gris assorti au décor (photos seulement), ou émoji posé sur un carré noir. Il reste sur toutes les images.
-3. Tu vérifies : tu ajoutes un masque là où un visage a été raté, tu retires un masque posé à tort. Si un seul visage compte, « Garder seul » retire d'un coup les autres masques de l'image affichée ; ceux qui apparaissent plus tard dans la vidéo restent en place.
+3. Tu vérifies : tu ajoutes un masque là où un visage a été raté, tu retires un masque posé à tort. Si un seul visage compte, « Garder seul » retire d'un coup, pour toute leur durée, les autres masques visibles sur l'image affichée ; ceux qui n'apparaissent que plus tard dans la vidéo, ou qui passent sur le visage gardé, restent en place.
 4. Le fichier est entièrement refait : le lieu, la date et le modèle du téléphone du fichier d'origine disparaissent.
 
 ## Ce que l'outil ne fait pas
@@ -141,8 +141,8 @@ node test/test-garder-seul.mjs
 ```
 
 Touche un visage de la vidéo de test, appuie sur « Garder seul », et vérifie que seuls les autres masques de l'image
-affichée sont retirés : ni un masque qui n'apparaît que plus tard, ni un second masque posé sur le même visage,
-ni un masque remis à la main.
+affichée sont retirés : ni un masque qui n'apparaît que plus tard, ni un second masque qui passe sur le même visage
+à un moment de la vidéo, ni un masque remis à la main.
 
 ### Aucune date dans le fichier, même long
 
