@@ -16,7 +16,7 @@ can be undone by AI. A solid box cannot: there is no image left underneath.
 
 1. You pick a video or a photo.
 2. The video is analysed 30 times per second, and a solid box is placed on every face: black, grey matched to the background (photos only), or an emoji on a black box. It stays on every frame.
-3. You check: add a mask where a face was missed, remove one placed by mistake.
+3. You check: add a mask where a face was missed, remove one placed by mistake. If only one face matters, "Garder seul" (keep only this one) removes all the other masks of the frame on screen at once; masks that show up later in the video stay in place.
 4. The file is fully re-encoded: the location, date and phone model stored in the original file are gone.
 
 ## What it does not do
@@ -132,6 +132,16 @@ Two videos identical to the pixel, except inside the faces. The second one gets 
 masks as the first, then both are exported: the output files must be byte-for-byte identical.
 The result therefore does not depend on the original face, and no watermark could be used to
 recover it. The black box is painted on the frame before it reaches the encoder, which never sees the face.
+
+### The "Garder seul" button
+
+```bash
+node test/test-garder-seul.mjs
+```
+
+Taps a face in the test video, presses "Garder seul", and checks that only the other masks of the frame on screen
+are removed: not a mask that only shows up later, not a second mask sitting on the same face, not a mask put back
+by hand.
 
 ### No date in the file, even a long one
 

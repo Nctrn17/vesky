@@ -214,6 +214,7 @@ button { font: inherit; color: inherit; }
   justify-content: center;
 }
 .maskBar button.sep { border-left: 2px solid var(--ink); }
+.maskBar button.word { width: auto; padding: 0 12px; font: 500 12px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap; }
 .maskBar button:active { background: rgba(11, 11, 10, 0.12); }
 
 .deck {

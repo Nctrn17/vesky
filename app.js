@@ -859,6 +859,23 @@ function toggleTrack(tr, j) {
   tr.off = tr.off.length ? [...tr.off.filter((e) => e.from < j), { from: j, off, at: j }] : [{ from: 0, off, at: j }];
 }
 
+// « Garder seul » : les autres masques automatiques de l'image affichée, à retirer d'un coup quand un seul visage compte
+// et que le reste est du décor pris pour un visage. Trois précautions : on ne touche à aucun suivi absent de cette image
+// (un visage qui arrive plus tard reste masqué), ni à un suivi empilé sur celui qu'on garde (le centre de la plus petite
+// case tombe dans la plus grande : c'est sans doute le même visage, suivi deux fois), ni à un masque déjà gardé ou remis
+// à la main (keep). Les suivis empilés sont gardés eux aussi, pour qu'un « Garder seul » fait ensuite sur un autre visage
+// ne les retire pas.
+function stackedWith(tr, j) {
+  const boxes = S.frames[j] || [];
+  const mine = boxes.filter((b) => b.track === tr);
+  const stacked = (a, b) => { const [s, g] = a.w * a.h < b.w * b.h ? [a, b] : [b, a]; return inside(g, s.x + s.w / 2, s.y + s.h / 2); };
+  return new Set(boxes.filter((b) => mine.some((m) => stacked(m, b))).map((b) => b.track));
+}
+function othersToRemove(tr, j) {
+  const spared = stackedWith(tr, j);
+  return [...new Set((S.frames[j] || []).map((b) => b.track))].filter((t) => !spared.has(t) && !t.keep && !isOff(t, j));
+}
+
 const manualAt = (t) => S.manual.filter((m) => t >= m.t0 - 1e-3 && t <= m.t1 + 1e-3);
 const inside = (r, x, y) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 
@@ -1087,6 +1104,7 @@ function refreshPanels() {
   const off = tr && isOff(tr, j);
   const last = tr && tr.off[tr.off.length - 1];
   const fromHere = tr && tr.off.length && last.at !== j && !isPhoto() ? " à partir d'ici" : '';
+  $('mOnly').hidden = !tr || off || !othersToRemove(tr, j).length;
   $('mDelete').textContent = off ? '↺' : '×';
   $('mDelete').title = tr ? (off ? 'Remettre ce masque' : 'Retirer ce masque') + fromHere : 'Retirer';
   const removed = S.tracks.filter(isRemoved).length;
@@ -1179,12 +1197,22 @@ $('mAll').onclick = () => {
   renderReview();
 };
 $('mDelete').onclick = () => {
-  if (S.sel && S.sel.track) { toggleTrack(S.sel.track, frameIndex(S.t)); refreshPanels(); renderReview(); return; }
+  // Un masque remis à la main est gardé par « Garder seul » ; retiré à la main, il ne l'est plus.
+  if (S.sel && S.sel.track) { const tr = S.sel.track, j = frameIndex(S.t); toggleTrack(tr, j); tr.keep = !isOff(tr, j); refreshPanels(); renderReview(); return; }
   S.manual = S.manual.filter((x) => x !== selectedManual());
   deselect();
 };
+$('mOnly').onclick = () => {
+  const tr = S.sel && S.sel.track;
+  if (!tr) return;
+  const j = frameIndex(S.t);
+  for (const t of othersToRemove(tr, j)) toggleTrack(t, j);
+  for (const t of stackedWith(tr, j)) t.keep = true;
+  refreshPanels();
+  renderReview();
+};
 $('restoreAll').onclick = () => {
-  for (const t of S.tracks) t.off = [];
+  for (const t of S.tracks) { t.off = []; t.keep = false; }
   refreshPanels();
   renderReview();
 };

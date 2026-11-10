@@ -47,6 +47,7 @@ node test/run-test.mjs
 python test/make-faces-pair.py
 node test/test-sans-trace.mjs
 node test/test-metadonnees.mjs
+node test/test-garder-seul.mjs
 ```
 
 Le serveur tourne dans un terminal à part. Les tests automatiques ne tournent que sur Chrome pour ordinateur :
