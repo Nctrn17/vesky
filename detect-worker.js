@@ -8,7 +8,7 @@ self.onmessage = async (e) => {
   const m = e.data;
   try {
     if (m.type === 'init') {
-      detect = await createDetector(new URL('.', self.location.href).href);
+      detect = await createDetector(new URL('.', self.location.href).href, m.threads || 1);
       // Un essai à blanc : si la détection ne marche pas ici, on le sait tout de suite.
       await detect(new OffscreenCanvas(64, 64), 64, 64, 64, 0.5);
       self.postMessage({ type: 'ready' });
