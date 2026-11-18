@@ -179,8 +179,10 @@ public class MainActivity extends Activity {
 
     private WebResourceResponse siteResponse(String path) {
         try {
-            InputStream in = getAssets().open(path.isEmpty() ? "site/index.html" : path);
-            return new WebResourceResponse(mime(path), null, in);
+            // Un dossier (« ./ », le lien de retour des pages Vérifier et Mentions) vaut sa page d'accueil.
+            String file = path.isEmpty() ? "site/index.html" : path.endsWith("/") ? path + "index.html" : path;
+            InputStream in = getAssets().open(file);
+            return new WebResourceResponse(mime(file), null, in);
         } catch (IOException e) {
             return null;
         }

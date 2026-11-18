@@ -10,8 +10,12 @@ const CACHE = 'vesky';
 // on n'attend donc qu'une fois.
 const WAIT = 3000, SLOW_FOR = 60000;
 let slowUntil = 0;
+// Les pages Vérifier et Mentions en font partie : liées en bas de la page principale, elles menaient à une page vide
+// hors ligne et dans la version Android. Pas de commentaire dans la liste : build.mjs et Android la relisent mot à mot.
 const FILES = [
   './',
+  'verifier.html',
+  'mentions.html',
   'style.css',
   'app.js',
   'detector.js',

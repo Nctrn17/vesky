@@ -14,7 +14,7 @@ ok=0
 # Même liste que build.mjs : les fichiers gardés hors ligne par sw.js, plus les pages et les licences.
 # _headers n'est pas un fichier servi : Cloudflare le lit pour régler les en-têtes, vérifiés plus bas.
 liste=$(git show HEAD:sw.js | sed -n '/^const FILES = \[/,/^\];/p' | grep -o "'[^']*'" | tr -d "'" | grep -v '^\./$')
-fichiers="index.html mentions.html verifier.html 404.html sw.js favicon.ico icon.svg $liste
+fichiers="index.html 404.html sw.js favicon.ico icon.svg $liste
   models/LICENSE-yunet.txt vendor/fonts/LICENSE.txt vendor/ort/LICENSE.txt vendor/mediabunny/LICENSE.txt"
 
 echo "Commit $(git rev-parse --short HEAD) comparé à $site"
