@@ -23,6 +23,7 @@ Le décodage des sorties (dans `detector.js`) suit `modules/objdetect/src/face_d
 la version publiée par [deface](https://github.com/ORB-HD/deface). Les poids sont ceux d'origine ; le fichier est
 seulement converti pour accepter une image de n'importe quelle taille (dimensions d'entrée et de sortie rendues libres
 avec `onnx.tools.update_model_dims`, poids retirés des entrées du graphe), comme deface le fait lui-même au chargement.
+Recette : `python entrainement/preparer-centerface.py <centerface.onnx de deface>`.
 `test/verifier-tiers.sh` contrôle l'empreinte du fichier d'origine et celle du fichier converti.
 
 Il regarde l'image réduite à 640 pixels de plus grand côté et trouve les visages moyens et grands ; YuNet ne garde que
