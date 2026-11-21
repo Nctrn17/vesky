@@ -10,8 +10,8 @@ android {
         applicationId 'fr.vesky.app'
         minSdk 29
         targetSdk 36
-        versionCode 3
-        versionName '1.0.2'
+        versionCode 4
+        versionName '1.0.3'
     }
 
     // Signature des APK publiés sur GitHub. La clé et ses mots de passe restent hors du dépôt :

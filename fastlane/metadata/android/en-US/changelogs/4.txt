@@ -1,0 +1,1 @@
+Fewer black squares where there is no face, thanks to a second detector. The Verify and Legal pages now open inside the app.

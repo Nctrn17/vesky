@@ -1,0 +1,1 @@
+Moins de carrés noirs posés là où il n'y a pas de visage, grâce à un second détecteur. Les pages Vérifier et Mentions s'ouvrent maintenant dans l'app.
