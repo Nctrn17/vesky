@@ -11,7 +11,7 @@ const sw = readFileSync(join(root, 'sw.js'), 'utf8');
 const listed = [...sw.match(/const FILES = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((f) => f !== './');
 const files = [
   'index.html', 'mentions.html', 'verifier.html', '404.html', 'sw.js', '_headers', 'favicon.ico', 'icon.svg', ...listed,
-  'models/LICENSE-yunet.txt', 'vendor/fonts/LICENSE.txt', 'vendor/ort/LICENSE.txt', 'vendor/mediabunny/LICENSE.txt',
+  'models/LICENSE-yunet.txt', 'models/LICENSE-centerface.txt', 'vendor/fonts/LICENSE.txt', 'vendor/ort/LICENSE.txt', 'vendor/mediabunny/LICENSE.txt',
 ];
 
 rmSync(dist, { recursive: true, force: true });

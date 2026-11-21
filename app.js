@@ -1,6 +1,6 @@
 // vesky : masque les visages d'une vidéo ou d'une photo, entièrement dans le navigateur.
 // Aucune requête réseau après le chargement de la page (voir aussi la politique de sécurité dans _headers).
-import { createDetector, detectBoth, neededScore } from './detector.js';
+import * as detector from './detector.js';
 
 // Ouvert en http (certains navigateurs, comme Opera sur iPhone, ne passent pas tout seuls en https) : le navigateur
 // coupe alors la copie hors ligne, l'export rapide et d'autres fonctions. On repart aussitôt sur l'adresse en https.
@@ -16,23 +16,32 @@ if (OLD_HOST || (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|\[:
 
 const $ = (id) => document.getElementById(id);
 
-const MIN_SCORE = 0.3;        // seuil de détection bas : on préfère trop masquer que pas assez
-// Les petits visages (moins de 12 % du petit côté) sont presque tous les ratés. Un petit carré posé à tort gêne peu :
-// pour eux, le seuil descend à 0,2 (visages ratés de jour -26 %, de nuit -34 %, mesuré par entrainement/eval-faces.py).
-const SMALL_SCORE = 0.2;
-// La nuit, le détecteur croit voir de grands visages peu sûrs dans le ciel, sur le trottoir ou dans une silhouette floue.
-// Un grand cadre (plus de 12 % du petit côté de l'image) doit donc être soit très sûr (jusqu'à 0,85 à partir de 25 %),
-// soit retrouvé sur l'image réduite au tiers (voir detectBoth). Et un gros plan bien reconnu sur l'image réduite
-// (0,7 au moins) est masqué même s'il a été raté sur l'image entière. Réglages mesurés sur 9 226 photos où chaque
-// visage a été repéré à la main (WIDER FACE et, de nuit, DARK FACE) : voir entrainement/eval-faces.py.
-const BIG_FROM = 0.12, BIG_TO = 0.25, BIG_SCORE = 0.85, LOW_SCORE = 0.7;
-// Score minimal d'un cadre retrouvé sur l'image réduite (seconde passe) pour être retenu.
-const JUDGE = { confirm: MIN_SCORE };
-const RULE = { min: MIN_SCORE, small: SMALL_SCORE, big: BIG_SCORE, from: BIG_FROM, to: BIG_TO };
-// La passe sur l'image réduite double presque le temps d'analyse. Pour rattraper les gros plans ratés, elle n'est faite
-// qu'une image sur 3 : un masque déborde déjà de 4 images avant et après chaque visage, il reste donc posé sans trou.
-// Elle est faite en plus sur toute image où un grand cadre attend sa confirmation (voir detectBoth).
-const LOW_EVERY = 3;
+// Deux détecteurs se partagent le travail. YuNet regarde l'image entière : il trouve les tout petits visages, mais il
+// invente beaucoup de visages moyens et grands (affiches, feuillages, lanternes, flou de nuit). CenterFace regarde l'image
+// réduite : il rate les visages minuscules, mais invente peu et rate moins de visages moyens et grands.
+// De YuNet on ne garde donc que les cadres de moins de 4,5 % du petit côté de l'image (6 % sur une image très sombre, où
+// CenterFace voit moins bien), à partir d'un score de 0,2 ; tout le reste vient de CenterFace, à partir de 0,2 aussi.
+// Les tout petits cadres de CenterFace (moins de 3 % du petit côté) ne comptent qu'à partir de 0,25 : dans une foule, il
+// en pose beaucoup de peu sûrs sur des nuques, des capuches ou le décor. Sans cette règle, une vraie vidéo de foule de
+// jour en 720p passait de 11,8 % d'image noircie (YuNet seul) à 14 %, avec deux fois plus de masques ; avec, 11,7 %.
+// Elle coûte des visages : sur le banc de nuit, 32 ratés au lieu de 26.
+// Mesuré sur 65 vidéos réelles (entrainement/eval-reel.mjs) contre YuNet seul, avec la cadence de YUNET_EVERY : visages
+// ratés de nuit 37 -> 32 sur 1 012, de jour 17 -> 15 sur 1 333 ; image noircie de nuit 22,7 % -> 14,6 %, de jour
+// 22,0 % -> 18,5 %. Sur 3 226 photos de jour (WIDER FACE, entrainement/eval-centerface.py) : grands masques sans visage
+// 386 -> 76, avec moins de visages ratés. Seul recul : sur des photos presque noires (DARK FACE), 62 visages ratés
+// contre 42 sur 1 287.
+const JUDGE = { score: 0.2, from: 0.045, darkFrom: 0.06, tinyFrom: 0.03, tinyScore: 0.25 };
+// Version des cadres attendus de detector.js et de detect-worker.js. Le téléphone garde une copie de chaque fichier
+// (sw.js) et, sur un réseau lent, peut servir une ancienne copie à côté d'un fichier neuf. Avec d'anciens cadres, judge
+// ne garderait que les petits visages : mieux vaut un outil arrêté qu'une image où il manque des masques.
+const DETECTOR = 2;
+const MIN_SCORE = 0.3;        // en dessous, un petit visage de YuNet doit être vu deux fois de suite pour ouvrir un masque
+const SMALL_SCORE = 0.2;      // score minimal d'un petit visage de YuNet : un petit carré posé à tort gêne peu
+const RULE = { min: MIN_SCORE, small: SMALL_SCORE };
+// YuNet sur l'image entière coûte le plus cher et ne sert plus qu'aux petits visages : sur une vidéo, il ne passe qu'une
+// image sur deux, le suivi reliant ses cadres d'un passage au suivant. CenterFace passe sur toutes les images : le passer
+// lui aussi une image sur deux ferait rater plus de visages (simulé hors ligne : un tiers de plus de nuit).
+const YUNET_EVERY = 2;
 const GROW = 1.3;             // chaque case est agrandie de 30 % autour du visage
 const ANALYSIS_FPS = 30;      // images regardées par seconde de vidéo
 const HOLD_FRAMES = 4;        // chaque masque commence 4 images avant et finit 4 images après le visage
@@ -60,7 +69,7 @@ const DET_SIDE = 1280;        // avec l'option « aller plus vite »
 const MAX_SIDE = 1920;        // plus grand côté de la vidéo produite
 const MAX_SIDE_PHOTO = 4096;
 
-const VERSION = '2026-11-18.1';   // affichée en bas de page, pour savoir quelle version tourne sur un téléphone
+const VERSION = '2026-11-21.1';   // affichée en bas de page, pour savoir quelle version tourne sur un téléphone
 const DEBUG = location.hostname === 'localhost' || new URLSearchParams(location.search).has('debug');
 
 const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
@@ -111,23 +120,24 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const secs = (t) => t.toFixed(1).replace('.', ',') + ' s';
 const isPhoto = () => S.kind === 'photo';
-const needed = (d) => neededScore(d, Math.min(S.W, S.H), RULE);
 const isSure = (d) => d.sure;
 function iou(a, b) {
   const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
   const iy = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
   return ix * iy / (a.w * a.h + b.w * b.h - ix * iy);
 }
-// Décide quels cadres d'une image sont assez sûrs pour ouvrir un masque, avec l'aide de la seconde passe.
+// Décide quels cadres d'une image sont gardés, et lesquels sont assez sûrs pour ouvrir un masque (voir JUDGE).
 function judge(boxes) {
-  const full = boxes.filter((b) => !b.lo), low = boxes.filter((b) => b.lo);
-  for (const d of full) {
-    d.sure = d.s >= needed(d) || (d.s >= JUDGE.confirm && low.some((l) => iou(d, l) > 0.3));
-    d.weak = d.sure && d.s < MIN_SCORE;   // petit visage admis grâce au seuil plus bas : à confirmer (buildTracks)
+  const short = Math.min(S.W, S.H);
+  const center = boxes.filter((b) => b.cf && (b.w / short >= JUDGE.tinyFrom || b.s >= JUDGE.tinyScore));
+  for (const c of center) c.sure = c.s >= JUDGE.score;
+  // De YuNet : les petits cadres seulement, sauf ceux qui doublent un visage sûr de CenterFace.
+  const small = boxes.filter((d) => !d.cf && d.w / short < (d.dk ? JUDGE.darkFrom : JUDGE.from) && !center.some((c) => c.sure && iou(c, d) > 0.3));
+  for (const d of small) {
+    d.sure = d.s >= RULE.small;
+    d.weak = d.sure && d.s < RULE.min;   // petit visage peu sûr : à confirmer (buildTracks)
   }
-  const extra = low.filter((l) => l.s >= LOW_SCORE && l.w / Math.min(S.W, S.H) >= BIG_FROM && !full.some((d) => d.sure && iou(d, l) > 0.3));
-  for (const l of extra) l.sure = true;
-  return full.concat(extra);
+  return center.concat(small);
 }
 
 /* ---------- Écrans ---------- */
@@ -239,17 +249,17 @@ function startWorker() {
     }, 60000);
     const runner = {
       stop: () => w.terminate(),
-      detect: (bitmap, maxSide, always) => new Promise((ok, ko) => {
+      detect: (bitmap, maxSide, small) => new Promise((ok, ko) => {
         if (broken) { bitmap.close(); ko(broken); return; }
         const id = nextId++;
         // Un fil tué sans prévenir (mémoire du téléphone saturée) ne répond plus jamais.
         pending.set(id, { ok, ko, timer: watch(id) });
-        w.postMessage({ type: 'detect', id, bitmap, w: bitmap.width, h: bitmap.height, maxSide, minScore: KEEP_SCORE, always, rule: RULE }, [bitmap]);
+        w.postMessage({ type: 'detect', id, bitmap, w: bitmap.width, h: bitmap.height, maxSide, minScore: KEEP_SCORE, small }, [bitmap]);
       }),
     };
     w.onmessage = (e) => {
       const m = e.data;
-      if (m.type === 'ready') { clearTimeout(giveUp); resolve(runner); return; }
+      if (m.type === 'ready') { clearTimeout(giveUp); if (m.detector === DETECTOR) resolve(runner); else { w.terminate(); resolve(null); } return; }   // fil d'une autre version : on s'en passe
       const p = pending.get(m.id);
       if (m.type === 'error' && !p) { if (window.diag) window.diag('worker erreur : ' + m.message); clearTimeout(giveUp); resolve(null); breakDown('fil en panne'); return; }
       if (!p) return;
@@ -263,10 +273,10 @@ function startWorker() {
 }
 
 async function localRunner() {
-  const detect = await createDetector(new URL('.', location.href).href);
+  const detect = await detector.createDetector(new URL('.', location.href).href);
   return {
-    detect: async (bitmap, maxSide, always) => {
-      const boxes = await detectBoth(detect, bitmap, bitmap.width, bitmap.height, maxSide, KEEP_SCORE, always, RULE);
+    detect: async (bitmap, maxSide, small) => {
+      const boxes = await detector.detectBoth(detect, bitmap, bitmap.width, bitmap.height, maxSide, KEEP_SCORE, small);
       bitmap.close();
       return boxes;
     },
@@ -333,7 +343,9 @@ async function sharedFile() {
 }
 
 async function init() {
+  const stale = detector.DETECTOR !== DETECTOR;
   try {
+    if (stale) throw new Error('detector.js : autre version');
     const cores = navigator.hardwareConcurrency || 2;
     // Sur iPhone, Safari donne peu de mémoire à une page : chaque moteur de détection en réserve une part,
     // au-delà de deux le démarrage échoue (« Out of memory »), surtout sur les modèles anciens.
@@ -368,7 +380,7 @@ async function init() {
     console.error(e);
     if (window.diag) window.diag('init échoue : ' + (e && e.message) + ' | ' + String(e && e.stack).slice(0, 300));
     $('pickText').textContent = 'Outil indisponible';
-    fail($('homeError'), "L'outil n'a pas pu se charger sur ce navigateur. Essaie avec Chrome ou Safari à jour.");
+    fail($('homeError'), stale ? 'Une mise à jour de vesky est en cours. Recharge la page dans un instant.' : "L'outil n'a pas pu se charger sur ce navigateur. Essaie avec Chrome ou Safari à jour.");
   }
 }
 
@@ -555,7 +567,7 @@ async function scan() {
   const free = [...S.runners], waiting = [];
   const acquire = () => (free.length ? Promise.resolve(free.pop()) : new Promise((r) => waiting.push(r)));
   const tasks = [];
-  let done = 0, error = null, onRelease = null, sent = 0;
+  let done = 0, error = null, onRelease = null;
   const release = (r) => { if (waiting.length) waiting.shift()(r); else free.push(r); if (onRelease) onRelease(); };
 
   const progress = () => {
@@ -600,10 +612,13 @@ async function scan() {
     if (job.cancelled || error) { release(runner); (await shot).close(); return; }
     const bitmap = await shot;
     const t0 = performance.now();
-    const always = isPhoto() || sent++ % LOW_EVERY === 0;   // compté par image envoyée, pas par numéro d'image
-    tasks.push(runner.detect(bitmap, side, always).then((found) => {
-      if (DEBUG) S.found.push({ found: found.map((b) => ({ ...b })), i, j });   // pour window.vesky.rejudge
+    // YuNet : sur les images de rang pair, pour que le résultat ne dépende pas de l'ordre d'arrivée des images, et sur
+    // toute image qui en sert plusieurs (vidéo de moins de 30 images par seconde), déjà plus espacées dans le temps.
+    const small = isPhoto() || i % YUNET_EVERY === 0 || j > i;
+    tasks.push(runner.detect(bitmap, side, small).then((found) => {
+      if (DEBUG) S.found.push({ found: found.map((b) => ({ ...b })), i, j, small });   // pour window.vesky.rejudge
       const boxes = judge(found);
+      boxes.small = small;   // YuNet est passé sur cette image (voir linkPasses)
       for (const b of boxes) b.at = i;   // première image servie par cette analyse
       S.detectMs += performance.now() - t0;
       S.detectCount++;
@@ -647,6 +662,7 @@ async function scan() {
   }
   S.scanMs = performance.now() - started;
   if (window.diag) window.diag(`analyse finie : ${total} images, ${(S.scanMs / 1000).toFixed(1)} s, ${S.seekFallbacks} reprises une par une, ${S.runners.length} fils, ${Math.round(S.detectMs / Math.max(1, S.detectCount))} ms par détection`);
+  linkPasses(results);
   S.raw = results;
   buildTracks(results);
   openReview(0);
@@ -755,6 +771,19 @@ function union(a, b) {
 
 const lerp = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, w: a.w + (b.w - a.w) * k, h: a.h + (b.h - a.h) * k });
 
+// Note sur chaque cadre d'un passage de YuNet l'image de son passage précédent (-1 pour le premier). Écrit sur les
+// cadres eux-mêmes, pour que les détections puissent être recopiées telles quelles (test/test-sans-trace.mjs).
+function linkPasses(results) {
+  let prev = -1, seen = null;
+  for (let k = 0; k < results.length; k++) {
+    const r = results[k];
+    if (!r || !r.small || r === seen) continue;   // une même analyse peut servir plusieurs images d'affilée
+    for (const b of r) b.before = prev;
+    seen = r;
+    prev = k;
+  }
+}
+
 function buildTracks(results) {
   const N = results.length;
   const tracks = [];
@@ -796,10 +825,10 @@ function buildTracks(results) {
       if (usedD.has(d) || !isSure(d)) continue;   // trop incertain pour ouvrir un nouveau masque
       // Un petit visage peu sûr n'ouvre un masque que s'il était déjà là à l'analyse d'avant : vu une seule fois,
       // c'est presque toujours du bruit, qui ferait clignoter des carrés (mesuré : près de la moitié des cas).
-      // Une même analyse sert à plusieurs images d'affilée (i à j) : la précédente est celle de l'image d'avant i.
-      // Photo : pas d'avant.
+      // YuNet ne passe pas sur toutes les images : l'analyse d'avant est celle de son passage précédent (d.before,
+      // voir linkPasses). Photo : pas d'avant.
       if (d.weak && N > 1) {
-        const k = (d.at ?? i) - 1;
+        const k = d.before ?? (d.at ?? i) - 1;
         if (!(results[k] || []).some((p) => p.s >= SMALL_SCORE && iou(p, d) > 0.3)) continue;
       }
       const t = { id: tracks.length + 1, dets: new Map(), off: [] };
@@ -1831,12 +1860,14 @@ if (DEBUG) window.vesky = {
     Object.assign(RULE, r);
     Object.assign(TRACK, t);
     const results = [];
-    for (const { found, i, j } of S.found) {
+    for (const { found, i, j, small } of S.found) {
       const boxes = judge(found.map((b) => ({ ...b })));
+      boxes.small = small;
       for (const b of boxes) b.at = i;
       for (let k = i; k <= j; k++) if (!results[k]) results[k] = boxes;
     }
     for (let k = 0; k < results.length; k++) results[k] ||= [];
+    linkPasses(results);
     S.raw = results;
     buildTracks(results);
   },

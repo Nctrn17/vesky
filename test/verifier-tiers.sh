@@ -28,4 +28,11 @@ compare vendor/mediabunny/mediabunny.min.mjs mb/package/dist/bundles/mediabunny.
 # Le modèle (models/yunet.onnx) n'est plus un fichier tiers tel quel : il a été réentraîné pour vesky.
 # Sa recette est dans entrainement/entrainer-nuit.sh, ses mesures dans models/README.md.
 
+# CenterFace : le fichier publié par deface, puis sa conversion (mêmes poids, taille d'image libre : models/README.md). On vérifie l'empreinte du fichier d'origine et celle du fichier embarqué.
+somme() { sha256sum "$1" | cut -d' ' -f1; }
+curl -sL -o centerface-deface.onnx https://raw.githubusercontent.com/ORB-HD/deface/master/deface/centerface.onnx
+if [ "$(somme centerface-deface.onnx)" = 09189deaaf8646c5c51a68447e3c744ea1e211798155d4728c20507b9f5aefbc ] && [ "$(somme "$ici/models/centerface.onnx")" = a55914d0f3472fa07baa66f09b4056301e5f771ffa6717faf2322707965fefc1 ]; then
+  echo "identique    CenterFace : fichier de deface et sa conversion"
+else echo "DIFFÉRENT    CenterFace : models/centerface.onnx"; ok=1; fi
+
 exit $ok

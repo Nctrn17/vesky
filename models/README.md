@@ -16,3 +16,15 @@ Mesuré avec la règle du site (`entrainement/eval-faces.py`), contre l'ancien m
 | Celui-ci | 64 | 938 | 332 |
 
 Le décodage des sorties (dans `detector.js`) suit `modules/objdetect/src/face_detect.cpp` d'OpenCV.
+
+# Second modèle : CenterFace (licence MIT)
+
+`centerface.onnx` est le modèle [CenterFace](https://github.com/Star-Clouds/CenterFace) (`LICENSE-centerface.txt`), dans
+la version publiée par [deface](https://github.com/ORB-HD/deface). Les poids sont ceux d'origine ; le fichier est
+seulement converti pour accepter une image de n'importe quelle taille (dimensions d'entrée et de sortie rendues libres
+avec `onnx.tools.update_model_dims`, poids retirés des entrées du graphe), comme deface le fait lui-même au chargement.
+`test/verifier-tiers.sh` contrôle l'empreinte du fichier d'origine et celle du fichier converti.
+
+Il regarde l'image réduite à 640 pixels de plus grand côté et trouve les visages moyens et grands ; YuNet ne garde que
+les tout petits (moins de 4,5 % du petit côté de l'image). Le décodage de ses sorties (dans `detector.js`) suit
+`deface/centerface.py`. Mesures : `entrainement/eval-reel.mjs` (vidéos) et `entrainement/eval-centerface.py` (photos).

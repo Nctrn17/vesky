@@ -47,7 +47,8 @@ You don't have to take our word for it. Each point below can be checked without 
 ## How it works
 
 - Static site, no build step for the code: `index.html`, `style.css`, `app.js`.
-- Face detection: the YuNet_n model, retrained to see better at night (`models/README.md`), run by ONNX Runtime Web (`detector.js`, `detect-worker.js`),
+- Face detection: two models (`models/README.md`). YuNet_n, retrained to see better at night, finds the tiniest faces on the full image (every other frame of a video); CenterFace finds the others
+  on a reduced image and puts far fewer masks where there is no face. Both are run by ONNX Runtime Web (`detector.js`, `detect-worker.js`),
   on several cores in parallel. Very dark frames are analysed twice, as is and brightened, and the results are merged.
 - Tracking: one box per face from frame to frame, enlarged by 30%, extended a few frames before and after.
 - Fast export: the original file is decoded frame by frame, each frame is masked then re-encoded
@@ -188,6 +189,7 @@ the same rule with CenterFace, the model used by [deface](https://github.com/ORB
 ## Third-party components
 
 - [YuNet_n](https://github.com/ShiqiYu/libfacedetection.train), BSD-3 licence, retrained on WIDER FACE and DARK FACE (`models/`).
+- [CenterFace](https://github.com/Star-Clouds/CenterFace), MIT licence, in the version published by [deface](https://github.com/ORB-HD/deface) (`models/`).
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime), MIT licence (`vendor/ort/`).
 - [Mediabunny](https://github.com/Vanilagy/mediabunny), MPL-2.0 licence (`vendor/mediabunny/`).
 - Archivo and JetBrains Mono fonts, SIL OFL 1.1 licence (`vendor/fonts/`).

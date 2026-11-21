@@ -21,7 +21,7 @@ Tu peux écrire en français ou en anglais.
   chargé depuis un autre site, pas de serveur. Rien ne doit quitter le téléphone. La règle
   `Content-Security-Policy` (`index.html` et `_headers`) ne s'assouplit pas.
 - **Un réglage de détection changé sans mesure.** Les seuils (`MIN_SCORE`, `TRACK`…) viennent de mesures.
-  Un changement doit être mesuré avec `entrainement/eval-faces.py` (photos annotées) et
+  Un changement doit être mesuré avec `entrainement/eval-faces.py` et `entrainement/eval-centerface.py` (photos annotées) et
   `entrainement/eval-reel.mjs` (vidéos réelles), chiffres avant et après dans la PR. Rater un visage de plus
   coûte plus cher que poser un masque de trop.
 - **Un fichier de `vendor/` retouché.** Ils doivent rester identiques aux originaux (`bash test/verifier-tiers.sh`).

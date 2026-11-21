@@ -167,7 +167,8 @@ def masks_old(r):
 
 
 def masks_app(r, low_score=0.7):
-    """La règle de app.js (judge) : un grand cadre doit être très sûr ou retrouvé sur l'image réduite au tiers."""
+    """L'ancienne règle de app.js, YuNet seul : un grand cadre doit être très sûr ou retrouvé sur l'image réduite au tiers.
+    La règle actuelle, à deux détecteurs, est mesurée par entrainement/eval-centerface.py."""
     side = min(r['W'], r['H'])
     out = [grow(d) for d in r['dets'] if d[4] >= (SMALL_SCORE if d[2] / side < 0.12 else ramp(d, side)) or (d[4] >= 0.3 and any(iou(d, l) > 0.3 for l in r['lo']))]
     return out + [grow(l) for l in r['lo'] if l[4] >= low_score and l[2] / side >= 0.12]

@@ -25,6 +25,7 @@ const FILES = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'models/yunet.onnx',
+  'models/centerface.onnx',
   'vendor/fonts/fonts.css',
   'vendor/fonts/archivo-latin.woff2',
   'vendor/fonts/archivo-latin-ext.woff2',

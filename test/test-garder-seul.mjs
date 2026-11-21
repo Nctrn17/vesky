@@ -72,7 +72,8 @@ const debut = await run(`${TOOLS} $('time').value = 2.5; $('time').dispatchEvent
   S.frames[j + 20].push({ x: 300, y: 300, w: 60, h: 60, track: tard });
   return { j, milieu: mid.track.id, masques: on() };`);
 if (debut.erreur) { console.error('ÉCHEC\n- ' + debut.erreur); ws.close(); chrome.kill(); process.exit(1); }
-check(debut.masques.length >= 7, 'moins de 7 masques au départ : ' + debut.masques.join(', '));
+// Les 4 visages et les 2 suivis fabriqués présents sur cette image. Pas 7 : le septième était un faux visage du décor.
+check(debut.masques.length >= 6, 'moins de 6 masques au départ : ' + debut.masques.join(', '));
 
 // 1. Toucher le visage moyen, puis « Garder seul » : restent lui, le suivi empilé et celui qui passe sur lui plus tard ;
 // les autres partent ; le suivi absent de l'image n'est pas touché.

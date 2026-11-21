@@ -69,7 +69,7 @@ tasks.register('copySite', Copy) {
     def block = (sw =~ /const FILES = \[([\s\S]*?)\];/)[0][1]
     def listed = (block =~ /'([^']+)'/).collect { it[1] }.findAll { it != './' }
     def files = ['index.html', 'favicon.ico', 'icon.svg'] + listed +
-        ['models/LICENSE-yunet.txt', 'vendor/fonts/LICENSE.txt', 'vendor/ort/LICENSE.txt', 'vendor/mediabunny/LICENSE.txt']
+        ['models/LICENSE-yunet.txt', 'models/LICENSE-centerface.txt', 'vendor/fonts/LICENSE.txt', 'vendor/ort/LICENSE.txt', 'vendor/mediabunny/LICENSE.txt']
     from(site) { include files.unique() }
     into 'src/main/assets/site'
     doFirst { delete 'src/main/assets/site' }

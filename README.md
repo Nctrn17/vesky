@@ -45,8 +45,9 @@ Pas besoin de nous croire sur parole : chacun de ces points se vérifie sans rie
 ## Comment c'est fait
 
 - Site statique, sans étape de construction : `index.html`, `style.css`, `app.js`.
-- Détection des visages : modèle YuNet_n réentraîné pour mieux voir la nuit (`models/README.md`), exécuté par ONNX Runtime Web (`detector.js`, `detect-worker.js`),
-  sur plusieurs cœurs en parallèle. Les images très sombres sont analysées deux fois, telles quelles et éclaircies,
+- Détection des visages : deux modèles (`models/README.md`) exécutés par ONNX Runtime Web (`detector.js`, `detect-worker.js`),
+  sur plusieurs cœurs en parallèle. YuNet_n, réentraîné pour mieux voir la nuit, trouve les tout petits visages sur l'image entière (une image sur deux d'une vidéo) ;
+  CenterFace trouve les autres sur l'image réduite, et pose bien moins de masques là où il n'y a pas de visage. Les images très sombres sont analysées deux fois, telles quelles et éclaircies,
   et les visages trouvés sont réunis.
 - Suivi : une seule case par visage d'une image à l'autre, agrandie de 30 %, prolongée de quelques images avant et après.
 - Export rapide : le fichier d'origine est relu image par image, chaque image est masquée puis réencodée
@@ -189,6 +190,7 @@ WIDER FACE (validation, de jour) et DARK FACE (de nuit). `entrainement/eval-cent
 ## Composants tiers
 
 - [YuNet_n](https://github.com/ShiqiYu/libfacedetection.train), licence BSD-3, réentraîné sur WIDER FACE et DARK FACE (`models/`).
+- [CenterFace](https://github.com/Star-Clouds/CenterFace), licence MIT, dans la version publiée par [deface](https://github.com/ORB-HD/deface) (`models/`).
 - [ONNX Runtime Web](https://github.com/microsoft/onnxruntime), licence MIT (`vendor/ort/`).
 - [Mediabunny](https://github.com/Vanilagy/mediabunny), licence MPL-2.0 (`vendor/mediabunny/`).
 - Polices Archivo et JetBrains Mono, licence SIL OFL 1.1 (`vendor/fonts/`).
